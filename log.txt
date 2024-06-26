@@ -7,17 +7,12 @@
 .config:7873:warning: override: reassigning to symbol KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
 .config:7874:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 .config:7875:warning: override: reassigning to symbol KSU_SUSFS_OPEN_REDIRECT
-../drivers/scsi/scsi_lib.c:321:16: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
-  321 |                 unsigned int busy = scsi_host_busy(shost);
-      |                              ^
-../drivers/scsi/scsi_lib.c:321:16: error: unused variable 'busy' [-Werror,-Wunused-variable]
-  321 |                 unsigned int busy = scsi_host_busy(shost);
-      |                              ^~~~
-2 errors generated.
-make[3]: *** [../scripts/Makefile.build:279: drivers/scsi/scsi_lib.o] Error 1
-make[3]: *** Waiting for unfinished jobs....
-make[2]: *** [../scripts/Makefile.build:522: drivers/scsi] Error 2
-make[2]: *** Waiting for unfinished jobs....
-make[1]: *** [/home/maul/kernel/kernel_platform/xiaomi/sm8450/Makefile:2045: drivers] Error 2
-make[1]: *** Waiting for unfinished jobs....
-make: *** [Makefile:196: __sub-make] Error 2
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
+Reloading overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/display/display/marble-sde-display-mtp-overlay.dtbo
+Reloading overlay blob out/arch/arm64/boot/dts/vendor/qcom/display/display/marble-sde-display-mtp-overlay.dtbo
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/display/display/marble-sde-display-mtp-overlay.dtbo
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo
+Reloading overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo
+Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo

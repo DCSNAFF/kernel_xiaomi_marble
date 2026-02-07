@@ -1,18 +1,23 @@
-.config:7859:warning: override: reassigning to symbol KSU_SUSFS
-.config:7861:warning: override: reassigning to symbol KSU_SUSFS_SUS_PATH
-.config:7862:warning: override: reassigning to symbol KSU_SUSFS_SUS_MOUNT
-.config:7865:warning: override: reassigning to symbol KSU_SUSFS_SUS_KSTAT
-.config:7868:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_UNAME
-.config:7869:warning: override: reassigning to symbol KSU_SUSFS_ENABLE_LOG
-.config:7870:warning: override: reassigning to symbol KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
-.config:7871:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-.config:7872:warning: override: reassigning to symbol KSU_SUSFS_OPEN_REDIRECT
-ld.lld: error: undefined symbol: susfs_uname_is_active
->>> referenced by supercalls.c:888 (../drivers/kernelsu/supercalls.c:888)
->>>               vmlinux.o:(ksu_handle_sys_reboot)
-
-ld.lld: error: undefined symbol: susfs_set_uname_from_kernel
->>> referenced by supercalls.c:893 (../drivers/kernelsu/supercalls.c:893)
->>>               vmlinux.o:(ksu_handle_sys_reboot)
-make[1]: *** [/home/maul/kernel/kernel_platform/xiaomi/sm8450/Makefile:1464: vmlinux] Error 1
+.config:7862:warning: override: reassigning to symbol KSU_SUSFS
+.config:7864:warning: override: reassigning to symbol KSU_SUSFS_SUS_PATH
+.config:7865:warning: override: reassigning to symbol KSU_SUSFS_SUS_MOUNT
+.config:7868:warning: override: reassigning to symbol KSU_SUSFS_SUS_KSTAT
+.config:7871:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_UNAME
+.config:7872:warning: override: reassigning to symbol KSU_SUSFS_ENABLE_LOG
+.config:7873:warning: override: reassigning to symbol KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+.config:7874:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+.config:7875:warning: override: reassigning to symbol KSU_SUSFS_OPEN_REDIRECT
+../drivers/scsi/scsi_lib.c:321:16: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+  321 |                 unsigned int busy = scsi_host_busy(shost);
+      |                              ^
+../drivers/scsi/scsi_lib.c:321:16: error: unused variable 'busy' [-Werror,-Wunused-variable]
+  321 |                 unsigned int busy = scsi_host_busy(shost);
+      |                              ^~~~
+2 errors generated.
+make[3]: *** [../scripts/Makefile.build:279: drivers/scsi/scsi_lib.o] Error 1
+make[3]: *** Waiting for unfinished jobs....
+make[2]: *** [../scripts/Makefile.build:522: drivers/scsi] Error 2
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [/home/maul/kernel/kernel_platform/xiaomi/sm8450/Makefile:2045: drivers] Error 2
+make[1]: *** Waiting for unfinished jobs....
 make: *** [Makefile:196: __sub-make] Error 2

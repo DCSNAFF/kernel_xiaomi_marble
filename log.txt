@@ -1,13 +1,12 @@
-<<<<<<< HEAD
-.config:7862:warning: override: reassigning to symbol KSU_SUSFS
-.config:7864:warning: override: reassigning to symbol KSU_SUSFS_SUS_PATH
-.config:7865:warning: override: reassigning to symbol KSU_SUSFS_SUS_MOUNT
-.config:7868:warning: override: reassigning to symbol KSU_SUSFS_SUS_KSTAT
-.config:7871:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_UNAME
-.config:7872:warning: override: reassigning to symbol KSU_SUSFS_ENABLE_LOG
-.config:7873:warning: override: reassigning to symbol KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
-.config:7874:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-.config:7875:warning: override: reassigning to symbol KSU_SUSFS_OPEN_REDIRECT
+.config:7861:warning: override: reassigning to symbol KSU_SUSFS
+.config:7863:warning: override: reassigning to symbol KSU_SUSFS_SUS_PATH
+.config:7864:warning: override: reassigning to symbol KSU_SUSFS_SUS_MOUNT
+.config:7867:warning: override: reassigning to symbol KSU_SUSFS_SUS_KSTAT
+.config:7870:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_UNAME
+.config:7871:warning: override: reassigning to symbol KSU_SUSFS_ENABLE_LOG
+.config:7872:warning: override: reassigning to symbol KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+.config:7873:warning: override: reassigning to symbol KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+.config:7874:warning: override: reassigning to symbol KSU_SUSFS_OPEN_REDIRECT
 Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
 Reloading overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
 Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/camera/marble-sm7475-camera-sensor.dtbo
@@ -17,5 +16,3 @@ Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/display/display/marble-
 Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo
 Reloading overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo
 Merging overlay blob out/arch/arm64/boot/dts/vendor/qcom/audio/marble-audio.dtbo
-=======
->>>>>>> parent of 65dade71d2b75 (BACKPORT: init/main.c: wrap long kernel cmdline when printing to logs)

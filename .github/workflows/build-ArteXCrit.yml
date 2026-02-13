@@ -1,0 +1,86 @@
+name: Build ArteXCrit Kernel with SukiSU-Ultra for Marble
+
+on:
+  workflow_dispatch:  # Trigger manual dari GitHub Actions tab
+  push:
+    branches:
+      - testing7
+      - arteXcrit  # Optional: buat branch baru kalau mau test tanpa ganggu testing7
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive  # Penting untuk KernelSU-Next submodule
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y bc bison build-essential curl flex git libelf-dev liblz4-tool libncurses5-dev libssl-dev python3 unzip zip zlib1g-dev cpio lzop rsync squashfs-tools bc gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Setup Proton Clang toolchain (recommended for 5.10 GKI)
+        run: |
+          wget https://github.com/kdrag0n/proton-clang/releases/download/20240921/proton-clang-20240921.tar.gz -O proton.tar.gz
+          mkdir -p \~/proton-clang
+          tar -xzf proton.tar.gz -C \~/proton-clang --strip-components=1
+          echo "\~/proton-clang/bin" >> $GITHUB_PATH
+          clang --version
+
+      - name: Apply SukiSU-Ultra KernelPatch patches (latest main)
+        run: |
+          git clone https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch --depth=1 sukisu-patches
+          cd sukisu-patches
+          bash setup.sh main || echo "Setup script ran with warnings - check logs if build fails"
+          cd ..
+          # Jika conflict karena KernelSU-Next sudah ada, comment baris di atas dan gunakan patch manual:
+          # git apply --reject sukisu-patches/*.patch || true
+
+      - name: Set Custom Kernel Name to ArteXCrit
+        run: |
+          # Override CONFIG_LOCALVERSION setelah defconfig
+          echo 'CONFIG_LOCALVERSION="-ArteXCrit"' >> .config || echo 'CONFIG_LOCALVERSION="-ArteXCrit"' > .config
+
+      - name: Build GKI Kernel for marble (using build.config.gki.aarch64)
+        env:
+          ARCH: arm64
+          SUBARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+          CLANG_TRIPLE: aarch64-linux-gnu-
+        run: |
+          export PATH=\~/proton-clang/bin:$PATH
+          # Gunakan build.sh repo ini (asumsi support arg seperti gki.aarch64)
+          chmod +x build.sh
+          ./build.sh gki.aarch64 || {
+            # Fallback: manual build jika build.sh gagal atau tidak support arg
+            make O=out ARCH=arm64 gki_defconfig
+            make O=out ARCH=arm64 -j$(nproc --all)
+          }
+
+      - name: Package with AnyKernel3 (flashable zip)
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1
+          # Copy kernel image & dtb (adjust path jika out/ berbeda)
+          cp out/arch/arm64/boot/Image* AnyKernel3/ || cp arch/arm64/boot/Image* AnyKernel3/
+          # Copy dtb jika ada (biasa di GKI)
+          find out/arch/arm64/boot/dts -name "*.dtb" -exec cp {} AnyKernel3/ \;
+          # Optional: dtbo.img jika dibutuhkan
+          # cp out/arch/arm64/boot/dtbo.img AnyKernel3/ || true
+          cd AnyKernel3
+          zip -r ../ArteXCrit-Marble-SukiSU.zip * -x .git
+          cd ..
+
+      - name: Upload Artifact (Kernel Zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArteXCrit-Kernel-marble
+          path: ArteXCrit-Marble-SukiSU.zip
+          retention-days: 7
+
+      - name: Show Build Summary
+        if: always()
+        run: |
+          echo "Kernel build selesai! Cek artifact untuk download zip."
+          uname -r || true  # Hanya untuk test env

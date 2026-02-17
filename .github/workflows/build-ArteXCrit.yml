@@ -1,86 +1,460 @@
-name: Build ArteXCrit Kernel with SukiSU-Ultra for Marble
+name: Build ArteXCrit Kernel for Poco F5
 
 on:
-  workflow_dispatch:  # Trigger manual dari GitHub Actions tab
   push:
-    branches:
-      - testing7
-      - arteXcrit  # Optional: buat branch baru kalau mau test tanpa ganggu testing7
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      kernel_branch:
+        description: 'Kernel Branch'
+        required: true
+        default: 'main'
+      defconfig:
+        description: 'Defconfig File'
+        required: true
+        default: 'marble_defconfig'
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - test
+          - nightly
+      kernelsu_branch:
+        description: 'KernelSU Next Branch'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - dev
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    
+    env:
+      KBUILD_BUILD_USER: "ArteXCrit"
+      KBUILD_BUILD_HOST: "ArteXCrit-CI"
+      ARCH: arm64
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_MAXSIZE: "10G"
+      KERNEL_NAME: "ArteXCrit"
+    
     steps:
-      - name: Checkout kernel source
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive  # Penting untuk KernelSU-Next submodule
+    - name: Checkout kernel source
+      uses: actions/checkout@v4
+      with:
+        repository: marble-indonesia/kernel_xiaomi_sm8450
+        ref: ${{ github.event.inputs.kernel_branch || 'main' }}
+        path: kernel-source
+        fetch-depth: 1
 
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y bc bison build-essential curl flex git libelf-dev liblz4-tool libncurses5-dev libssl-dev python3 unzip zip zlib1g-dev cpio lzop rsync squashfs-tools bc gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - name: Checkout AnyKernel3
+      uses: actions/checkout@v4
+      with:
+        repository: osm0sis/AnyKernel3
+        path: anykernel
+        fetch-depth: 1
 
-      - name: Setup Proton Clang toolchain (recommended for 5.10 GKI)
-        run: |
-          wget https://github.com/kdrag0n/proton-clang/releases/download/20240921/proton-clang-20240921.tar.gz -O proton.tar.gz
-          mkdir -p \~/proton-clang
-          tar -xzf proton.tar.gz -C \~/proton-clang --strip-components=1
-          echo "\~/proton-clang/bin" >> $GITHUB_PATH
-          clang --version
+    - name: Checkout KernelSU Next
+      uses: actions/checkout@v4
+      with:
+        repository: rifsxd/KernelSU-Next
+        ref: ${{ github.event.inputs.kernelsu_branch || 'main' }}
+        path: kernelsu-next
+        fetch-depth: 1
 
-      - name: Apply SukiSU-Ultra KernelPatch patches (latest main)
-        run: |
-          git clone https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch --depth=1 sukisu-patches
-          cd sukisu-patches
-          bash setup.sh main || echo "Setup script ran with warnings - check logs if build fails"
-          cd ..
-          # Jika conflict karena KernelSU-Next sudah ada, comment baris di atas dan gunakan patch manual:
-          # git apply --reject sukisu-patches/*.patch || true
+    - name: Cache toolchain
+      uses: actions/cache@v3
+      with:
+        path: ~/toolchain
+        key: toolchain-${{ runner.os }}-clang17
+        restore-keys: |
+          toolchain-${{ runner.os }}-
 
-      - name: Set Custom Kernel Name to ArteXCrit
-        run: |
-          # Override CONFIG_LOCALVERSION setelah defconfig
-          echo 'CONFIG_LOCALVERSION="-ArteXCrit"' >> .config || echo 'CONFIG_LOCALVERSION="-ArteXCrit"' > .config
+    - name: Setup build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bc bison build-essential ca-certificates ccache \
+          clang cmake curl file flex git libelf-dev libssl-dev \
+          lld llvm ninja-build python3 python3-pip texinfo \
+          u-boot-tools xz-utils zlib1g-dev libncurses5-dev \
+          libncursesw5-dev pigz jq
+        
+        pip3 install pyelftools
 
-      - name: Build GKI Kernel for marble (using build.config.gki.aarch64)
-        env:
-          ARCH: arm64
-          SUBARCH: arm64
-          CROSS_COMPILE: aarch64-linux-gnu-
-          CLANG_TRIPLE: aarch64-linux-gnu-
-        run: |
-          export PATH=\~/proton-clang/bin:$PATH
-          # Gunakan build.sh repo ini (asumsi support arg seperti gki.aarch64)
-          chmod +x build.sh
-          ./build.sh gki.aarch64 || {
-            # Fallback: manual build jika build.sh gagal atau tidak support arg
-            make O=out ARCH=arm64 gki_defconfig
-            make O=out ARCH=arm64 -j$(nproc --all)
-          }
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ github.job }}-${{ github.run_id }}
+        max-size: 10G
 
-      - name: Package with AnyKernel3 (flashable zip)
-        run: |
-          git clone https://github.com/osm0sis/AnyKernel3 --depth=1
-          # Copy kernel image & dtb (adjust path jika out/ berbeda)
-          cp out/arch/arm64/boot/Image* AnyKernel3/ || cp arch/arm64/boot/Image* AnyKernel3/
-          # Copy dtb jika ada (biasa di GKI)
-          find out/arch/arm64/boot/dts -name "*.dtb" -exec cp {} AnyKernel3/ \;
-          # Optional: dtbo.img jika dibutuhkan
-          # cp out/arch/arm64/boot/dtbo.img AnyKernel3/ || true
-          cd AnyKernel3
-          zip -r ../ArteXCrit-Marble-SukiSU.zip * -x .git
-          cd ..
+    - name: Download AOSP Clang Toolchain
+      run: |
+        mkdir -p ~/toolchain
+        cd ~/toolchain
+        
+        if [ ! -d "clang-r487747c" ]; then
+          echo "⬇️ Downloading AOSP Clang 17.0.2..."
+          wget -q --show-progress https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz
+          tar -xzf clang-r487747c.tar.gz
+          rm -f clang-r487747c.tar.gz
+        fi
+        
+        # Download GCC untuk compat
+        if [ ! -d "aarch64-linux-android-4.9" ]; then
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 aarch64-linux-android-4.9
+        fi
+        
+        if [ ! -d "arm-linux-androideabi-4.9" ]; then
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+        fi
+        
+        echo "TOOLCHAIN_PATH=$HOME/toolchain" >> $GITHUB_ENV
 
-      - name: Upload Artifact (Kernel Zip)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ArteXCrit-Kernel-marble
-          path: ArteXCrit-Marble-SukiSU.zip
-          retention-days: 7
+    - name: Integrate KernelSU Next
+      run: |
+        cd $GITHUB_WORKSPACE/kernel-source
+        
+        echo "🔧 Integrating KernelSU Next..."
+        
+        # Copy KernelSU Next files ke drivers/
+        cp -rf $GITHUB_WORKSPACE/kernelsu-next/kernel/* drivers/
+        
+        # Tambahkan entry ksu ke Kconfig jika belum ada
+        if ! grep -q "source \"drivers/kernelsu/Kconfig\"" drivers/Kconfig; then
+          echo "source \"drivers/kernelsu/Kconfig\"" >> drivers/Kconfig
+        fi
+        
+        # Tambahkan ksu ke Makefile drivers
+        if ! grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile; then
+          echo "obj-\$(CONFIG_KSU) += kernelsu/" >> drivers/Makefile
+        fi
+        
+        # Enable KernelSU di defconfig
+        echo "CONFIG_KSU=y" >> arch/arm64/configs/${{ github.event.inputs.defconfig || 'marble_defconfig' }}
+        echo "CONFIG_KSU_DEBUG=n" >> arch/arm64/configs/${{ github.event.inputs.defconfig || 'marble_defconfig' }}
+        
+        # Patch untuk non-GKI kernel (5.10)
+        if [ -f "drivers/kernelsu/setup.sh" ]; then
+          bash drivers/kernelsu/setup.sh
+        fi
+        
+        echo "✅ KernelSU Next integrated"
 
-      - name: Show Build Summary
-        if: always()
-        run: |
-          echo "Kernel build selesai! Cek artifact untuk download zip."
-          uname -r || true  # Hanya untuk test env
+    - name: Configure environment variables
+      run: |
+        echo "KERNEL_SOURCE=$GITHUB_WORKSPACE/kernel-source" >> $GITHUB_ENV
+        echo "ANYKERNEL_DIR=$GITHUB_WORKSPACE/anykernel" >> $GITHUB_ENV
+        echo "OUT_DIR=$GITHUB_WORKSPACE/kernel-source/out" >> $GITHUB_ENV
+        
+        CLANG_PATH="$TOOLCHAIN_PATH/clang-r487747c/bin"
+        GCC64_PATH="$TOOLCHAIN_PATH/aarch64-linux-android-4.9/bin"
+        GCC32_PATH="$TOOLCHAIN_PATH/arm-linux-androideabi-4.9/bin"
+        
+        echo "PATH=$CLANG_PATH:$GCC64_PATH:$GCC32_PATH:$PATH" >> $GITHUB_ENV
+
+    - name: Pre-build cleanup
+      run: |
+        cd $KERNEL_SOURCE
+        make O=$OUT_DIR clean 2>/dev/null || true
+        make O=$OUT_DIR mrproper 2>/dev/null || true
+        mkdir -p $OUT_DIR
+
+    - name: Generate defconfig with ArteXCrit branding
+      run: |
+        cd $KERNEL_SOURCE
+        
+        DEFCONFIG="${{ github.event.inputs.defconfig || 'marble_defconfig' }}"
+        
+        echo "📝 Using defconfig: $DEFCONFIG"
+        
+        if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
+          echo "❌ Defconfig $DEFCONFIG not found!"
+          ls -la arch/arm64/configs/ || echo "No configs directory"
+          exit 1
+        fi
+        
+        # Generate config
+        make O=$OUT_DIR ARCH=arm64 $DEFCONFIG
+        
+        # Modifikasi .config untuk ArteXCrit branding
+        sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-ArteXCrit"/' $OUT_DIR/.config
+        sed -i 's/CONFIG_DEFAULT_HOSTNAME=.*/CONFIG_DEFAULT_HOSTNAME="ArteXCrit"/' $OUT_DIR/.config
+        
+        # Pastikan KernelSU enabled
+        if ! grep -q "CONFIG_KSU=y" $OUT_DIR/.config; then
+          echo "CONFIG_KSU=y" >> $OUT_DIR/.config
+        fi
+        
+        # Update config
+        make O=$OUT_DIR ARCH=arm64 olddefconfig
+        
+        echo "✅ Defconfig generated with ArteXCrit branding"
+
+    - name: Build ArteXCrit Kernel
+      run: |
+        cd $KERNEL_SOURCE
+        
+        # Export build variables
+        export CC="ccache clang"
+        export CXX="ccache clang++"
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+        export READELF=llvm-readelf
+        export LD=ld.lld
+        
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+        export LLVM=1
+        export LLVM_IAS=1
+        
+        # ArteXCrit build flags
+        export KBUILD_BUILD_VERSION="1"
+        export KBUILD_BUILD_TIMESTAMP="$(date)"
+        
+        echo "🚀 Building ArteXCrit Kernel..."
+        START_TIME=$(date +%s)
+        
+        make -j$(nproc --all) O=$OUT_DIR \
+          ARCH=arm64 \
+          CC="$CC" \
+          LD="$LD" \
+          AR="$AR" \
+          NM="$NM" \
+          OBJCOPY="$OBJCOPY" \
+          OBJDUMP="$OBJDUMP" \
+          STRIP="$STRIP" \
+          CROSS_COMPILE="$CROSS_COMPILE" \
+          CROSS_COMPILE_COMPAT="$CROSS_COMPILE_COMPAT" \
+          LLVM="$LLVM" \
+          LLVM_IAS="$LLVM_IAS" \
+          2>&1 | tee build.log
+        
+        BUILD_STATUS=${PIPESTATUS[0]}
+        END_TIME=$(date +%s)
+        BUILD_DURATION=$((END_TIME - START_TIME))
+        
+        echo "⏱️ Build duration: $(($BUILD_DURATION / 60))m $(($BUILD_DURATION % 60))s"
+        
+        if [ $BUILD_STATUS -ne 0 ]; then
+          echo "❌ Build failed!"
+          tail -n 100 build.log
+          exit 1
+        fi
+        
+        if [ ! -f "$OUT_DIR/arch/arm64/boot/Image" ]; then
+          echo "❌ Kernel image not found!"
+          exit 1
+        fi
+        
+        # Verifikasi KernelSU ada di kernel
+        if grep -q "ArteXCrit" $OUT_DIR/.config; then
+          echo "✅ ArteXCrit branding confirmed"
+        fi
+        
+        echo "✅ ArteXCrit Kernel build successful!"
+        ls -lh $OUT_DIR/arch/arm64/boot/Image
+
+    - name: Build Kernel Modules
+      run: |
+        cd $KERNEL_SOURCE
+        
+        export CC="ccache clang"
+        export LLVM=1
+        
+        if grep -q "CONFIG_MODULES=y" $OUT_DIR/.config; then
+          echo "🔧 Building kernel modules..."
+          make -j$(nproc --all) O=$OUT_DIR \
+            ARCH=arm64 \
+            CC="$CC" \
+            LLVM=1 \
+            modules
+          
+          make O=$OUT_DIR \
+            ARCH=arm64 \
+            INSTALL_MOD_PATH=$OUT_DIR/modules \
+            modules_install
+          
+          # Strip modules
+          find $OUT_DIR/modules -name "*.ko" -exec $TOOLCHAIN_PATH/clang-r487747c/bin/llvm-strip --strip-unneeded {} \; 2>/dev/null || true
+          
+          echo "✅ Modules built"
+        fi
+
+    - name: Create ArteXCrit AnyKernel3 Package
+      run: |
+        cd $ANYKERNEL_DIR
+        
+        # Clean
+        rm -f Image Image.gz *.dtb dtbo.img *.zip
+        rm -rf modules/*
+        
+        # Copy kernel
+        if [ -f "$OUT_DIR/arch/arm64/boot/Image.gz" ]; then
+          cp "$OUT_DIR/arch/arm64/boot/Image.gz" .
+        else
+          cp "$OUT_DIR/arch/arm64/boot/Image" .
+        fi
+        
+        # Copy DTBs
+        if [ -d "$OUT_DIR/arch/arm64/boot/dts/vendor/qcom" ]; then
+          find "$OUT_DIR/arch/arm64/boot/dts/vendor/qcom" -name "*.dtb" -exec cp {} . \;
+        elif [ -d "$OUT_DIR/arch/arm64/boot/dts/qcom" ]; then
+          find "$OUT_DIR/arch/arm64/boot/dts/qcom" -name "*.dtb" -exec cp {} . \;
+        fi
+        
+        # Copy DTBO
+        [ -f "$OUT_DIR/arch/arm64/boot/dtbo.img" ] && cp "$OUT_DIR/arch/arm64/boot/dtbo.img" .
+        
+        # Copy modules
+        if [ -d "$OUT_DIR/modules" ]; then
+          find "$OUT_DIR/modules" -name "*.ko" -exec cp {} modules/ \; 2>/dev/null || true
+        fi
+        
+        # Update anykernel.sh untuk ArteXCrit
+        cat > anykernel.sh << 'EOF'
+        # ArteXCrit Kernel for Poco F5
+        # Auto-generated by GitHub Actions
+
+        properties() { '
+        kernel.string=ArteXCrit Kernel with KernelSU Next
+        do.devicecheck=1
+        do.modules=1
+        do.systemless=1
+        do.cleanup=1
+        do.cleanuponabort=0
+        device.name1=marble
+        device.name2=marblein
+        device.name3=marble_global
+        device.name4=marble_id
+        supported.versions=13.0-14.0
+        supported.patchlevels=
+        '; }
+
+        block=/dev/block/bootdevice/by-name/boot
+        is_slot_device=0
+        ramdisk_compression=auto
+        patch_vbmeta_flag=auto
+
+        . tools/ak3-core.sh
+
+        set_perm_recursive 0 0 755 644 $ramdisk/*;
+        set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
+
+        dump_boot;
+
+        write_boot;
+        EOF
+        
+        # Create zip name
+        BUILD_TYPE="${{ github.event.inputs.build_type || 'stable' }}"
+        KSU_VERSION=$(cat $GITHUB_WORKSPACE/kernelsu-next/kernel/Kconfig 2>/dev/null | grep "KernelSU" | head -1 || echo "KernelSU-Next")
+        DATE=$(date +%Y%m%d)
+        TIME=$(date +%H%M)
+        ZIP_NAME="ArteXCrit-PocoF5-${BUILD_TYPE}-${DATE}-${TIME}.zip"
+        
+        # Create zip
+        zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x .git README.md LICENSE .gitignore
+        
+        echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+        echo "✅ ArteXCrit package created: $ZIP_NAME"
+
+    - name: Upload ArteXCrit Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArteXCrit-${{ github.run_number }}
+        path: |
+          ${{ github.workspace }}/*.zip
+          ${{ github.workspace }}/kernel-source/build.log
+        if-no-files-found: error
+        retention-days: 30
+
+    - name: Create ArteXCrit Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ArteXCrit-v${{ github.run_number }}-${{ github.event.inputs.build_type || 'stable' }}
+        name: 🔥 ArteXCrit Kernel ${{ github.event.inputs.build_type || 'stable' }} #${{ github.run_number }}
+        body: |
+          # 🔥 ArteXCrit Kernel for Poco F5 (marble)
+          
+          ![ArteXCrit](https://img.shields.io/badge/ArteXCrit-Custom%20Kernel-red?style=for-the-badge)
+          ![KernelSU](https://img.shields.io/badge/KernelSU-Next-blue?style=for-the-badge)
+          
+          ## 📱 Device Support
+          - **Poco F5** (marble)
+          - **Poco F5 India** (marblein)
+          - **Poco F5 Global** (marble_global)
+          
+          ## 🚀 Features
+          - ✅ **KernelSU Next** - Root access built-in
+          - ✅ **Optimized for SM8450** platform
+          - ✅ **Custom ArteXCrit branding**
+          - ✅ **LLVM/Clang 17** compiled
+          - ✅ **Latest security patches**
+          
+          ## 📋 Build Info
+          | Property | Value |
+          |----------|-------|
+          | **Build Date** | $(date +%Y-%m-%d) |
+          | **Build Type** | ${{ github.event.inputs.build_type || 'stable' }} |
+          | **Kernel Branch** | ${{ github.event.inputs.kernel_branch || 'main' }} |
+          | **Defconfig** | ${{ github.event.inputs.defconfig || 'marble_defconfig' }} |
+          | **KernelSU Branch** | ${{ github.event.inputs.kernelsu_branch || 'main' }} |
+          | **Compiler** | AOSP Clang 17.0.2 |
+          
+          ## ⚡ Installation
+          1. **Backup** boot partition via TWRP/OrangeFox
+          2. **Flash** `ArteXCrit-*.zip` via recovery
+          3. **Wipe** Cache & Dalvik
+          4. **Reboot** to system
+          5. **Install** KernelSU Manager app
+          
+          ## 🛠️ KernelSU Setup
+          - Download **KernelSU Manager** dari [GitHub releases](https://github.com/rifsxd/KernelSU-Next/releases)
+          - Grant root access via app
+          - Enjoy systemless root!
+          
+          ## ⚠️ Disclaimer
+          > **Flash at your own risk!** 
+          > Saya tidak bertanggung jawab atas bootloop, data loss, atau kerusakan device.
+          > Selalu backup sebelum flash!
+          
+          ---
+          💻 **Built with GitHub Actions** | 🎨 **ArteXCrit Custom Kernel**
+        files: ${{ github.workspace }}/*.zip
+        draft: false
+        prerelease: ${{ github.event.inputs.build_type != 'stable' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: ArteXCrit Build Summary
+      if: always()
+      run: |
+        echo "╔════════════════════════════════════╗"
+        echo "║      🔥 ARTEXCRIT BUILD SUMMARY    ║"
+        echo "╚════════════════════════════════════╝"
+        echo "Status: ${{ job.status }}"
+        
+        if [ -f "$OUT_DIR/arch/arm64/boot/Image" ]; then
+          echo "✅ Kernel Image: $(ls -lh $OUT_DIR/arch/arm64/boot/Image | awk '{print $5}')"
+        fi
+        
+        if [ -f "$GITHUB_WORKSPACE/$ZIP_NAME" ]; then
+          echo "✅ Flashable ZIP: $(ls -lh $GITHUB_WORKSPACE/$ZIP_NAME | awk '{print $5}')"
+        fi
+        
+        echo "📦 ArteXCrit with KernelSU Next ready!"
+        
